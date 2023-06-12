@@ -11,18 +11,13 @@ public partial class AddAccountForm : Form
         account = new Account();
         InitializeComponent();
     }
-    protected override void OnFormClosing(FormClosingEventArgs e)
-    {
-        SaveAccount();
-        base.OnFormClosing(e);
-    }
+
     private void ButtonDone_Click(object sender, EventArgs e)
     {
         SaveAccount();
     }
     private void SaveAccount()
     {
-
         account.title = textBoxTitle.Text;
         account.email = textBoxEmail.Text;
         account.password = textBoxPassword.Text;

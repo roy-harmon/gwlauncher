@@ -50,7 +50,7 @@ public partial class MainForm : Form
         if (!_allowVisible)
         {
             value = false;
-            if (!this.IsHandleCreated) CreateHandle();
+            if (!IsHandleCreated) CreateHandle();
         }
         base.SetVisibleCore(value);
     }
@@ -91,7 +91,8 @@ public partial class MainForm : Form
                 {
                     MessageBox.Show(
                         @"There is a running Guild Wars instance with a higher privilege level than GW Launcher currently has. Attempting to restart as Admin.");
-                    AdminAccess.RestartAsAdminPrompt(true);
+                    if (!AdminAccess.RestartAsAdminPrompt(true))
+                        return;
                 }
                 else
                 {
@@ -186,17 +187,7 @@ public partial class MainForm : Form
     private void ToolStripMenuItemAddNew_Click(object sender, EventArgs e)
     {
         using var gui = new AddAccountForm();
-        if (gui.ShowDialog() is not (DialogResult.Yes or DialogResult.OK)) return;
-        Program.mutex.WaitOne();
-        var account = gui.account;
-        if (account.email != null)
-        {
-            Program.accounts.Add(account);
-            Program.accounts.Save();
-            RefreshUI();
-        }
-
-        Program.mutex.ReleaseMutex();
+        gui.ShowDialog();
     }
 
     private void ToolStripMenuItemRemoveSelected_Click(object sender, EventArgs e)
@@ -249,7 +240,7 @@ public partial class MainForm : Form
             return;
         }
 
-        int? index = _selectedItems.Contains(listViewAccounts.FocusedItem.Index)
+        int? index = listViewAccounts.FocusedItem != null && _selectedItems.Contains(listViewAccounts.FocusedItem.Index)
             ? listViewAccounts.FocusedItem.Index
             : null;
         if (index == null && _selectedItems.Count > 0)
@@ -284,30 +275,26 @@ public partial class MainForm : Form
     private void NotifyIcon_MouseClick(object sender, MouseEventArgs e)
     {
         _allowVisible = true;
-        if (e.Button == MouseButtons.Right && Visible == false)
-        {
-            _keepOpen = true;
-        }
-        else
-        {
-            _keepOpen = false;
-        }
+        _keepOpen = e.Button == MouseButtons.Right && Visible == false;
 
         bool IsVisible(Point p)
         {
             return Screen.AllScreens.Any(s => p.X < s.Bounds.Right && p.X > s.Bounds.Left && p.Y > s.Bounds.Top && p.Y < s.Bounds.Bottom);
         }
 
-        var position = Cursor.Position;
+        var rect = NotifyIconHelper.GetIconRect(notifyIcon);
+        var position = new Point(rect.Left, rect.Top);
+
+        RefreshUI();
 
         position.X -= Width / 2;
-        if (position.Y > SystemInformation.VirtualScreen.Height / 2)
+        if (position.Y > Screen.FromPoint(Cursor.Position).WorkingArea.Height / 2)
         {
-            position.Y -= 25 + Height;
+            position.Y -= 5 + Height;
         }
         else
         {
-            position.Y += 25;
+            position.Y += 5;
         }
 
         if (!IsVisible(position))
@@ -317,6 +304,7 @@ public partial class MainForm : Form
 
         if (!IsVisible(position))
         {
+            Debug.Assert(Screen.PrimaryScreen != null, "Screen.PrimaryScreen != null");
             position.X = Screen.PrimaryScreen.Bounds.Width / 2;
             position.Y = Screen.PrimaryScreen.Bounds.Height / 2;
         }
@@ -334,10 +322,28 @@ public partial class MainForm : Form
             var tmpfile = Path.GetDirectoryName(client) + Path.DirectorySeparatorChar + "Gw.tmp";
             if (File.Exists(tmpfile))
             {
-                File.Delete(tmpfile);
+                try
+                {
+                    File.Delete(tmpfile);
+                }
+                catch (Exception)
+                {
+                    // ignored
+                }
             }
 
-            var process = Process.Start(client, "-image");
+            Process process = new()
+            {
+                StartInfo = new ProcessStartInfo()
+                {
+                    FileName = client,
+                    Arguments = "-image",
+                    UseShellExecute = true,
+                    Verb = "runas"
+                }
+            };
+            process.Start();
+
             var taskCompletionSource = new TaskCompletionSource<object>();
             process.EnableRaisingEvents = true;
             process.Exited += (_, _) => taskCompletionSource.TrySetResult(null!);
@@ -348,7 +354,14 @@ public partial class MainForm : Form
 
             if (File.Exists(tmpfile))
             {
-                File.Delete(tmpfile);
+                try
+                {
+                    File.Delete(tmpfile);
+                }
+                catch (Exception)
+                {
+                    // ignored
+                }
             }
 
             return taskCompletionSource.Task;
@@ -361,20 +374,14 @@ public partial class MainForm : Form
 
     private async void ToolStripMenuItemUpdateAllClients_Click(object sender, EventArgs e)
     {
-        if (!AdminAccess.HasAdmin())
-        {
-            if (!AdminAccess.RestartAsAdminPrompt())
-            {
-                return;
-            }
-        }
-
         var clients = Program.accounts.Select(account => account.gwpath).Distinct();
 
         foreach (var client in clients)
         {
             await RunClientUpdateAsync(client);
         }
+
+        Show();
     }
 
     private delegate void SetActiveUICallback(int index, bool active);
