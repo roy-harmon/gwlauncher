@@ -1,4 +1,4 @@
-﻿using GW_Launcher.uMod;
+﻿using System.Extensions;
 using Microsoft.Win32;
 
 namespace GW_Launcher;
@@ -32,16 +32,24 @@ internal class MulticlientPatch
     {
         var path = account.gwpath;
 
-        uModTexClient? texClient = null;
-
-        if (ModManager.GetTexmods(account.gwpath, account.mods).Any())
+        var texmods = string.Join('\n', ModManager.GetTexmods(account.gwpath, account));
+        if (!texmods.IsNullOrEmpty())
         {
-            texClient = new uModTexClient();
+            var modfile = Path.Combine(Path.GetDirectoryName(path)!, "modlist.txt");
+            try
+            {
+                File.WriteAllText(modfile, texmods);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Debug.WriteLine("No permission to write into gw.exe directory.");
+                modfile = Path.Combine(Directory.GetCurrentDirectory(), "modlist.txt");
+                File.WriteAllText(modfile, texmods);
+            }
         }
 
-        var args =
-            $"-email \"{account.email}\" -password \"{account.password}\"";
-        
+        var args = $"-email \"{account.email}\" -password \"{account.password}\"";
+
         if (!string.IsNullOrEmpty(account.character))
         {
             args += $" -character \"{account.character}\"";
@@ -56,6 +64,7 @@ internal class MulticlientPatch
         {
             return null;
         }
+
         var process = Process.GetProcessById(pId);
 
         if (!McPatch(process.Handle))
@@ -65,7 +74,7 @@ internal class MulticlientPatch
 
         var memory = new GWCAMemory(process);
 
-        foreach (var dll in ModManager.GetDlls(path, account.mods))
+        foreach (var dll in ModManager.GetDlls(path, account))
         {
             memory.LoadModule(dll);
         }
@@ -74,32 +83,6 @@ internal class MulticlientPatch
         {
             WinApi.ResumeThread(hThread);
             WinApi.CloseHandle(hThread);
-        }
-
-        if (texClient != null)
-        {
-            Task.Run(() =>
-            {
-                var timeout = 0;
-                while (!texClient.IsReady() && !Program.shouldClose && timeout++ < 10)
-                {
-                    Thread.Sleep(200);
-                }
-
-                foreach (var tex in ModManager.GetTexmods(path, account.mods))
-                {
-                    if (Program.shouldClose || timeout >= 10)
-                    {
-                        break;
-                    }
-                    texClient.AddFile(tex);
-                }
-
-                texClient.Send();
-                texClient.Dispose();
-
-                GC.Collect(2, GCCollectionMode.Optimized); // force garbage collection
-            });
         }
 
         return memory;
@@ -180,8 +163,7 @@ internal class MulticlientPatch
     private static bool McPatch(IntPtr processHandle)
     {
         Debug.Assert(processHandle != IntPtr.Zero, "processHandle != IntPtr.Zero");
-        byte[] sigPatch =
-        {
+        byte[] sigPatch = {
             0x56, 0x57, 0x68, 0x00, 0x01, 0x00, 0x00, 0x89, 0x85, 0xF4, 0xFE, 0xFF, 0xFF, 0xC7, 0x00, 0x00, 0x00, 0x00,
             0x00
         };
