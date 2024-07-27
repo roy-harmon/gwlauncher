@@ -17,7 +17,6 @@
 2.  Select the latest release.
 3.  Put the executable in its own folder! It will create files (Settings.json, Accounts.json, d3d9.dll) in the same location when you launch it.
 4.  Run the executable.
-5.  If you do not have the [.NET 6 Desktop Runtime (x86)](https://dotnet.microsoft.com/en-us/download/dotnet/6.0) installed, it will prompt you to download it.
 
 * * *
 
@@ -84,4 +83,4 @@ Alternatively there is also a GUI to select plugins for specific accounts when y
 Similarly, all .tpf or .zip files will be loaded as TexMod files. This means that you do not have to use uMod anymore, if you only want basic TexMod functionality.  
 Plugins are loaded in the alphabetical order of their filename. Textures that are already replaced by `1_FirstTexmod.tpf` cannot be replaced by subsequent `2_SecondTexmod.tpf`, so make sure your texmods are named in ascending alphabetical order.
 
-**Important**: Currently the r44 version of uMod is used for performance reasons. This means that you can only load textures created with TexMod or uMod v1. TexMods created with r49 or higher will not load and may break things.
+**Important**: The r44 version of uMod is used for performance reasons. This means that you can only load texmods created with TexMod or uMod v1. TexMods created with uMod v2 (r49 or higher) will not load. This is because the latter use an expensive 64 bit hashing algorithm, rather than the standard 32 bit one.
